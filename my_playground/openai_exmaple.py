@@ -18,7 +18,7 @@ client = OpenAI(
 
 system_prompt = open("my_playground/system_prompt.txt", "r").read()
 user_prompt = open("my_playground/user_prompt.txt", "r").read()
-image_b64 = encode_image("my_playground/01.png")
+image_b64 = encode_image("my_playground/03.png")
 
 messages = [
     {"role": "system", "content": system_prompt},
@@ -35,8 +35,33 @@ messages = [
 
 
 completion = client.chat.completions.create(
-    model="Qwen/Qwen2.5-7B-Instruct",
+    model="Qwen/Qwen2-VL-7B-Instruct",
     messages=messages,
 )
 
-print(completion.choices[0].message.content)
+print(completion)
+# print(completion.choices[0].message.content)
+
+#
+#
+# from openai import OpenAI
+#
+# client = OpenAI()
+#
+# response = client.responses.create(
+#     model="gpt-4.1",
+#     input=[
+#         {
+#             "role": "user",
+#             "content": [
+#                 { "type": "input_text", "text": "what is in this image?" },
+#                 {
+#                     "type": "input_image",
+#                     "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+#                 }
+#             ]
+#         }
+#     ]
+# )
+#
+# print(response)
