@@ -1,25 +1,24 @@
+import asyncio
 import base64
-from openai import OpenAI
+import httpx
+import json
+import time
 
+API_URL = "http://localhost:8888/v1/chat/completions"
+API_KEY = "abc"
 
-# Function to encode the image
+# Function to encode the image to base64
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
-client = OpenAI(
-    base_url="http://localhost:8888/v1",
-    api_key="abc",
-)
-
-
-
-
+# Load shared inputs
 system_prompt = open("my_playground/system_prompt.txt", "r").read()
 user_prompt = open("my_playground/user_prompt.txt", "r").read()
 image_b64 = encode_image("my_playground/03.png")
 
+# Pre-constructed message template
 messages = [
     {"role": "system", "content": system_prompt},
     {"role": "user", "content": [
@@ -33,35 +32,42 @@ messages = [
     ]}
 ]
 
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
 
-completion = client.chat.completions.create(
-    model="Qwen/Qwen2-VL-7B-Instruct",
-    messages=messages,
-)
+# Async function to send one request
+async def send_request(client, request_id):
+    payload = {
+        "model": "Qwen/Qwen2-VL-7B-Instruct",
+        "messages": messages
+    }
+    try:
+        response = await client.post(API_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        print(f"[Request {request_id}] ✅ Success")
+    except httpx.HTTPError as e:
+        print(f"[Request {request_id}] ❌ Error: {e}")
 
-print(completion)
-# print(completion.choices[0].message.content)
 
-#
-#
-# from openai import OpenAI
-#
-# client = OpenAI()
-#
-# response = client.responses.create(
-#     model="gpt-4.1",
-#     input=[
-#         {
-#             "role": "user",
-#             "content": [
-#                 { "type": "input_text", "text": "what is in this image?" },
-#                 {
-#                     "type": "input_image",
-#                     "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-#                 }
-#             ]
-#         }
-#     ]
-# )
-#
-# print(response)
+# Main function to send concurrent requests and time the process
+async def main(num_requests=1000):
+    print(f"Sending {num_requests} requests asynchronously...")
+    start = time.perf_counter()
+
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        tasks = [send_request(client, i+1) for i in range(num_requests)]
+        await asyncio.gather(*tasks)
+
+    end = time.perf_counter()
+    duration = end - start
+    rps = num_requests / duration
+    print("\n--- Summary ---")
+    print(f"Total requests: {num_requests}")
+    print(f"Total time: {duration:.2f} seconds")
+    print(f"Requests/sec: {rps:.2f}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
