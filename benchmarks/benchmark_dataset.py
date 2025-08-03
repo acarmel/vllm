@@ -837,7 +837,10 @@ class VisionArenaDataset(HuggingFaceDataset):
         self.maybe_oversample_requests(sampled_requests, num_requests)
         return sampled_requests
 
-
+class AcarmelFt1Dataset(VisionArenaDataset, HuggingFaceDataset):
+    SUPPORTED_DATASET_PATHS = {
+        "acarmel/ft1": lambda x: x["conversation"][0][0]["content"]
+    }
 # -----------------------------------------------------------------------------
 # Instruct Coder Dataset Implementation
 # -----------------------------------------------------------------------------
