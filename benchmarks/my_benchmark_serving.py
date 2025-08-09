@@ -43,7 +43,7 @@ from backend_request_func import (
     ASYNC_REQUEST_FUNCS,
     OPENAI_COMPATIBLE_BACKENDS,
     RequestFuncInput,
-    RequestFuncOutput,
+    RequestFuncOutput, async_request_openai_chat_completions,
 )
 from benchmarks.benchmark_dataset import AcarmelFt1Dataset
 
@@ -251,10 +251,11 @@ async def benchmark(
     ramp_up_start_rps: Optional[int] = None,
     ramp_up_end_rps: Optional[int] = None,
 ):
-    if backend in ASYNC_REQUEST_FUNCS:
-        request_func = ASYNC_REQUEST_FUNCS[backend]
-    else:
-        raise ValueError(f"Unknown backend: {backend}")
+    # if backend in ASYNC_REQUEST_FUNCS:
+    #     request_func = ASYNC_REQUEST_FUNCS[backend]
+    # else:
+    #     raise ValueError(f"Unknown backend: {backend}")
+    request_func = async_request_openai_chat_completions
 
     print("Starting initial single prompt test run...")
     test_prompt, test_prompt_len, test_output_len, test_mm_content = (
@@ -354,12 +355,12 @@ async def benchmark(
         )
 
     async for request, current_request_rate in get_request(
-        input_requests,
-        request_rate,
-        burstiness,
-        ramp_up_strategy,
-        ramp_up_start_rps,
-        ramp_up_end_rps,
+            input_requests,
+            request_rate,
+            burstiness,
+            ramp_up_strategy,
+            ramp_up_start_rps,
+            ramp_up_end_rps,
     ):
         if ramp_up_strategy is not None:
             current_int_rps = int(current_request_rate)
@@ -394,6 +395,7 @@ async def benchmark(
         )
         task = limited_request_func(request_func_input=request_func_input, pbar=pbar)
         tasks.append(asyncio.create_task(task))
+    print("Running rest of the tests...")
     outputs: list[RequestFuncOutput] = await asyncio.gather(*tasks)
 
     if profile:
@@ -473,12 +475,12 @@ async def benchmark(
         result["rps_change_events"] = rps_change_events
 
     def process_one_metric(
-        # E.g., "ttft"
-        metric_attribute_name: str,
-        # E.g., "TTFT"
-        metric_name: str,
-        # E.g., "Time to First Token"
-        metric_header: str,
+            # E.g., "ttft"
+            metric_attribute_name: str,
+            # E.g., "TTFT"
+            metric_name: str,
+            # E.g., "Time to First Token"
+            metric_header: str,
     ):
         # This function prints and adds statistics of the specified
         # metric.
@@ -625,12 +627,13 @@ def main(args: argparse.Namespace):
         if args.ramp_up_strategy == "exponential" and args.ramp_up_start_rps == 0:
             raise ValueError("For exponential ramp-up, the start RPS cannot be 0.")
 
+
     if args.base_url is not None:
         api_url = f"{args.base_url}{args.endpoint}"
         base_url = f"{args.base_url}"
     else:
-        api_url = f"http://{args.host}:{args.port}{args.endpoint}"
-        base_url = f"http://{args.host}:{args.port}"
+        api_url = f"https://{args.host}:{args.port}{args.endpoint}"
+        base_url = f"https://{args.host}:{args.port}"
 
     tokenizer = get_tokenizer(
         tokenizer_id,
@@ -638,141 +641,23 @@ def main(args: argparse.Namespace):
         trust_remote_code=args.trust_remote_code,
     )
 
-    if args.dataset_name is None:
-        raise ValueError(
-            "Please specify '--dataset-name' and the corresponding "
-            "'--dataset-path' if required."
-        )
+    args.hf_split = "train"
+    args.hf_subset = None
 
-    if args.dataset_name == "custom":
-        dataset = CustomDataset(dataset_path=args.dataset_path)
-        input_requests = dataset.sample(
-            num_requests=args.num_prompts,
-            tokenizer=tokenizer,
-            output_len=args.custom_output_len,
-            skip_chat_template=args.custom_skip_chat_template,
-        )
+    input_requests = AcarmelFt1Dataset(
+        dataset_path=args.dataset_path,
+        dataset_subset=args.hf_subset,
+        dataset_split=args.hf_split,
+        random_seed=args.seed,
+        no_stream=args.no_stream,
+    ).sample(
+        num_requests=args.num_prompts,
+        tokenizer=tokenizer,
+        output_len=args.hf_output_len,
+    )
 
-    elif args.dataset_name == "sonnet":
-        dataset = SonnetDataset(dataset_path=args.dataset_path)
-        # For the "sonnet" dataset, formatting depends on the backend.
-        if args.backend == "openai-chat":
-            input_requests = dataset.sample(
-                num_requests=args.num_prompts,
-                input_len=args.sonnet_input_len,
-                output_len=args.sonnet_output_len,
-                prefix_len=args.sonnet_prefix_len,
-                tokenizer=tokenizer,
-                return_prompt_formatted=False,
-            )
-        else:
-            assert tokenizer.chat_template or tokenizer.default_chat_template, (
-                "Tokenizer/model must have chat template for sonnet dataset."
-            )
-            input_requests = dataset.sample(
-                num_requests=args.num_prompts,
-                input_len=args.sonnet_input_len,
-                output_len=args.sonnet_output_len,
-                prefix_len=args.sonnet_prefix_len,
-                tokenizer=tokenizer,
-                return_prompt_formatted=True,
-            )
-
-    elif args.dataset_name == "hf":
-        # all following datasets are implemented from the
-        # HuggingFaceDataset base class
-        if args.dataset_path in VisionArenaDataset.SUPPORTED_DATASET_PATHS:
-            dataset_class = VisionArenaDataset
-            args.hf_split = "train"
-            args.hf_subset = None
-        elif args.dataset_path in AcarmelFt1Dataset.SUPPORTED_DATASET_PATHS:
-            dataset_class = AcarmelFt1Dataset
-            args.hf_split = "train"
-            args.hf_subset = None
-
-        elif args.dataset_path in InstructCoderDataset.SUPPORTED_DATASET_PATHS:
-            dataset_class = InstructCoderDataset
-            args.hf_split = "train"
-        elif args.dataset_path in MTBenchDataset.SUPPORTED_DATASET_PATHS:
-            dataset_class = MTBenchDataset
-            args.hf_split = "train"
-        elif args.dataset_path in ConversationDataset.SUPPORTED_DATASET_PATHS:
-            dataset_class = ConversationDataset
-        elif args.dataset_path in AIMODataset.SUPPORTED_DATASET_PATHS:
-            dataset_class = AIMODataset
-            args.hf_split = "train"
-        elif args.dataset_path in NextEditPredictionDataset.SUPPORTED_DATASET_PATHS:  # noqa: E501
-            dataset_class = NextEditPredictionDataset
-            args.hf_split = "train"
-        elif args.dataset_path in ASRDataset.SUPPORTED_DATASET_PATHS:
-            dataset_class = ASRDataset
-            args.hf_split = "train"
-        else:
-            supported_datasets = set(
-                [
-                    dataset_name
-                    for cls in HuggingFaceDataset.__subclasses__()
-                    for dataset_name in cls.SUPPORTED_DATASET_PATHS
-                ]
-            )
-            raise ValueError(
-                f"Unsupported dataset path: {args.dataset_path}. "
-                "Huggingface dataset only supports dataset_path"
-                f" from one of following: {supported_datasets}. "
-                "Please consider contributing if you would "
-                "like to add support for additional dataset formats."
-            )
-
-        if dataset_class.IS_MULTIMODAL and backend not in [
-            "openai-chat",
-            "openai-audio",
-        ]:
-            # multi-modal benchmark is only available on OpenAI Chat backend.
-            raise ValueError(
-                "Multi-modal content is only supported on 'openai-chat' and "
-                "'openai-audio' backend."
-            )
-        input_requests = dataset_class(
-            dataset_path=args.dataset_path,
-            dataset_subset=args.hf_subset,
-            dataset_split=args.hf_split,
-            random_seed=args.seed,
-            no_stream=args.no_stream,
-        ).sample(
-            num_requests=args.num_prompts,
-            tokenizer=tokenizer,
-            output_len=args.hf_output_len,
-        )
-
-    else:
-        # For datasets that follow a similar structure, use a mapping.
-        dataset_mapping = {
-            "sharegpt": lambda: ShareGPTDataset(
-                random_seed=args.seed, dataset_path=args.dataset_path
-            ).sample(
-                tokenizer=tokenizer,
-                num_requests=args.num_prompts,
-                output_len=args.sharegpt_output_len,
-            ),
-            "burstgpt": lambda: BurstGPTDataset(
-                random_seed=args.seed, dataset_path=args.dataset_path
-            ).sample(tokenizer=tokenizer, num_requests=args.num_prompts),
-            "random": lambda: RandomDataset(dataset_path=args.dataset_path).sample(
-                tokenizer=tokenizer,
-                num_requests=args.num_prompts,
-                prefix_len=args.random_prefix_len,
-                input_len=args.random_input_len,
-                output_len=args.random_output_len,
-                range_ratio=args.random_range_ratio,
-            ),
-        }
-
-        try:
-            input_requests = dataset_mapping[args.dataset_name]()
-        except KeyError as err:
-            raise ValueError(f"Unknown dataset: {args.dataset_name}") from err
     goodput_config_dict = check_goodput_args(args)
-
+    #
     # Collect the sampling parameters.
     sampling_params = {
         k: v
@@ -785,18 +670,10 @@ def main(args: argparse.Namespace):
         if v is not None
     }
 
-    # Sampling parameters are only supported by openai-compatible backend.
-    if sampling_params and args.backend not in OPENAI_COMPATIBLE_BACKENDS:
-        raise ValueError(
-            "Sampling parameters are only supported by openai-compatible backends."
-        )
 
     if "temperature" not in sampling_params:
         sampling_params["temperature"] = 0.0  # Default to greedy decoding.
 
-    if args.backend == "llama.cpp":
-        # Disable prompt caching in llama.cpp backend
-        sampling_params["cache_prompt"] = False
 
     # Avoid GC processing "static" data - reduce pause times.
     gc.collect()
@@ -1082,11 +959,11 @@ def create_argument_parser():
     parser.add_argument(
         "--percentile-metrics",
         type=str,
-        default="ttft,tpot,itl",
+        default="ttft,tpot,itl,e2el",
         help="Comma-separated list of selected metrics to report percentils. "
         "This argument specifies the metrics to report percentiles. "
         'Allowed metric names are "ttft", "tpot", "itl", "e2el". '
-        'Default value is "ttft,tpot,itl".',
+        'Default value is "ttft,tpot,itl,e2el".',
     )
     parser.add_argument(
         "--metric-percentiles",
@@ -1124,70 +1001,6 @@ def create_argument_parser():
         help="Skip applying chat template to prompt, used only for custom dataset.",
     )
 
-    sonnet_group = parser.add_argument_group("sonnet dataset options")
-    sonnet_group.add_argument(
-        "--sonnet-input-len",
-        type=int,
-        default=550,
-        help="Number of input tokens per request, used only for sonnet dataset.",
-    )
-    sonnet_group.add_argument(
-        "--sonnet-output-len",
-        type=int,
-        default=150,
-        help="Number of output tokens per request, used only for sonnet dataset.",
-    )
-    sonnet_group.add_argument(
-        "--sonnet-prefix-len",
-        type=int,
-        default=200,
-        help="Number of prefix tokens per request, used only for sonnet dataset.",
-    )
-
-    sharegpt_group = parser.add_argument_group("sharegpt dataset options")
-    sharegpt_group.add_argument(
-        "--sharegpt-output-len",
-        type=int,
-        default=None,
-        help="Output length for each request. Overrides the output length "
-        "from the ShareGPT dataset.",
-    )
-
-    random_group = parser.add_argument_group("random dataset options")
-    random_group.add_argument(
-        "--random-input-len",
-        type=int,
-        default=1024,
-        help="Number of input tokens per request, used only for random sampling.",
-    )
-    random_group.add_argument(
-        "--random-output-len",
-        type=int,
-        default=128,
-        help="Number of output tokens per request, used only for random sampling.",
-    )
-    random_group.add_argument(
-        "--random-range-ratio",
-        type=float,
-        default=0.0,
-        help="Range ratio for sampling input/output length, "
-        "used only for random sampling. Must be in the range [0, 1) to define "
-        "a symmetric sampling range"
-        "[length * (1 - range_ratio), length * (1 + range_ratio)].",
-    )
-    random_group.add_argument(
-        "--random-prefix-len",
-        type=int,
-        default=0,
-        help=(
-            "Number of fixed prefix tokens before the random context "
-            "in a request. "
-            "The total input length is the sum of `random-prefix-len` and "
-            "a random "
-            "context length sampled from [input_len * (1 - range_ratio), "
-            "input_len * (1 + range_ratio)]."
-        ),
-    )
 
     hf_group = parser.add_argument_group("hf dataset options")
     hf_group.add_argument(

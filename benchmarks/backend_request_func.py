@@ -360,7 +360,7 @@ async def async_request_openai_chat_completions(
     )
 
     async with aiohttp.ClientSession(
-        trust_env=True, timeout=AIOHTTP_TIMEOUT
+        trust_env=True, timeout=AIOHTTP_TIMEOUT,connector=aiohttp.TCPConnector(verify_ssl=False)
     ) as session:
         content = [{"type": "text", "text": request_func_input.prompt}]
         if request_func_input.multi_modal_content:
@@ -436,6 +436,7 @@ async def async_request_openai_chat_completions(
                     output.generated_text = generated_text
                     output.success = True
                     output.latency = most_recent_timestamp - st
+                    print(f"Latency: {output.latency:.2f} seconds")
                 else:
                     output.error = response.reason or ""
                     output.success = False
