@@ -113,7 +113,7 @@ def calculate_metrics(
     input_requests: list[SampleRequest],
     outputs: list[RequestFuncOutput],
     dur_s: float,
-    tokenizer: PreTrainedTokenizerBase,
+    # tokenizer: PreTrainedTokenizerBase,
     selected_percentile_metrics: list[str],
     selected_percentiles: list[float],
     goodput_config_dict: dict[str, float],
@@ -137,11 +137,12 @@ def calculate_metrics(
                 # len(outputs[i].itl) since multiple output tokens may be
                 # bundled together
                 # Note : this may inflate the output token count slightly
-                output_len = len(
-                    tokenizer(
-                        outputs[i].generated_text, add_special_tokens=False
-                    ).input_ids
-                )
+                output_len = 0
+                # output_len = len(
+                #     tokenizer(
+                        # outputs[i].generated_text, add_special_tokens=False
+                    # ).input_ids
+                # )
             actual_output_lens.append(output_len)
             total_input += input_requests[i].prompt_len
             tpot = 0
@@ -233,7 +234,7 @@ async def benchmark(
     base_url: str,
     model_id: str,
     model_name: str,
-    tokenizer: PreTrainedTokenizerBase,
+    # tokenizer: PreTrainedTokenizerBase,
     input_requests: list[SampleRequest],
     logprobs: Optional[int],
     request_rate: float,
@@ -421,7 +422,7 @@ async def benchmark(
         input_requests=input_requests,
         outputs=outputs,
         dur_s=benchmark_duration,
-        tokenizer=tokenizer,
+        # tokenizer=tokenizer,
         selected_percentile_metrics=selected_percentile_metrics,
         selected_percentiles=selected_percentiles,
         goodput_config_dict=goodput_config_dict,
@@ -635,11 +636,11 @@ def main(args: argparse.Namespace):
         api_url = f"https://{args.host}:{args.port}{args.endpoint}"
         base_url = f"https://{args.host}:{args.port}"
 
-    tokenizer = get_tokenizer(
-        tokenizer_id,
-        tokenizer_mode=tokenizer_mode,
-        trust_remote_code=args.trust_remote_code,
-    )
+    # tokenizer = get_tokenizer(
+    #     tokenizer_id,
+    #     tokenizer_mode=tokenizer_mode,
+    #     trust_remote_code=args.trust_remote_code,
+    # )
 
     args.hf_split = "train"
     args.hf_subset = None
@@ -652,7 +653,7 @@ def main(args: argparse.Namespace):
         no_stream=args.no_stream,
     ).sample(
         num_requests=args.num_prompts,
-        tokenizer=tokenizer,
+        # tokenizer=tokenizer,
         output_len=args.hf_output_len,
     )
 
@@ -686,7 +687,7 @@ def main(args: argparse.Namespace):
             base_url=base_url,
             model_id=model_id,
             model_name=model_name,
-            tokenizer=tokenizer,
+            # tokenizer=tokenizer,
             input_requests=input_requests,
             logprobs=args.logprobs,
             request_rate=args.request_rate,

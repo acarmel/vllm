@@ -847,7 +847,7 @@ class AcarmelFt1Dataset(HuggingFaceDataset):
 
     def sample(
         self,
-        tokenizer: PreTrainedTokenizerBase,
+        #tokenizer: PreTrainedTokenizerBase,
         num_requests: int,
         output_len: Optional[int] = None,
         enable_multimodal_chat: bool = False,
@@ -863,7 +863,7 @@ class AcarmelFt1Dataset(HuggingFaceDataset):
                 raise ValueError(f"Unsupported dataset path: {self.dataset_path}")
             prompt = parser_fn(item)
             mm_content = process_image(item["images"][0])
-            prompt_len = len(tokenizer(prompt).input_ids)
+            prompt_len = 0 #len(tokenizer(prompt).input_ids)
             if enable_multimodal_chat:
                 # Note: when chat is enabled the request prompt_len is no longer
                 # accurate and we will be using request output to count the
