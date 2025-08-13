@@ -839,7 +839,8 @@ class VisionArenaDataset(HuggingFaceDataset):
 
 class AcarmelFt1Dataset(HuggingFaceDataset):
     SUPPORTED_DATASET_PATHS = {
-        "acarmel/ft1": lambda x: x["conversation"][0][0]["content"]
+        "acarmel/ft1": lambda x: x["conversation"][0][0]["content"],
+        "LightricksDS/acarmel-ft1": lambda x: x["conversation"][0][0]["content"]
     }
 
     DEFAULT_OUTPUT_LEN = 128
